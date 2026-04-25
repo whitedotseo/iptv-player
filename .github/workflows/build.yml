@@ -1,0 +1,82 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install pyinstaller PyQt6 PyQt6-Qt6 PyQt6-sip requests
+    
+    - name: Download ffmpeg
+      run: |
+        $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip
+        Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_tmp
+        $ffmpeg = Get-ChildItem -Path ffmpeg_tmp -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+        $ffprobe = Get-ChildItem -Path ffmpeg_tmp -Recurse -Filter "ffprobe.exe" | Select-Object -First 1
+        Copy-Item $ffmpeg.FullName -Destination ffmpeg.exe
+        Copy-Item $ffprobe.FullName -Destination ffprobe.exe
+      shell: powershell
+    
+    - name: Build EXE
+      run: |
+        pyinstaller `
+          --noconfirm --clean `
+          --name "IPTVPlayer" `
+          --windowed `
+          --onefile `
+          --add-binary "ffmpeg.exe;." `
+          --add-binary "ffprobe.exe;." `
+          --hidden-import PyQt6.QtCore `
+          --hidden-import PyQt6.QtGui `
+          --hidden-import PyQt6.QtWidgets `
+          --hidden-import PyQt6.QtMultimedia `
+          --hidden-import PyQt6.QtMultimediaWidgets `
+          --hidden-import PyQt6.QtNetwork `
+          --hidden-import PyQt6.sip `
+          --hidden-import requests `
+          --exclude-module tkinter `
+          --exclude-module matplotlib `
+          iptv_player.py
+    
+    - name: Upload EXE
+      uses: actions/upload-artifact@v4
+      with:
+        name: IPTVPlayer-Windows
+        path: dist/IPTVPlayer.exe
+        retention-days: 30
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      if: github.ref == 'refs/heads/main'
+      with:
+        tag_name: v2.0
+        name: IPTV Player v2.0
+        body: |
+          ## IPTV Player dla Windows
+          
+          ### Instalacja
+          1. Pobierz `IPTVPlayer.exe`
+          2. Uruchom — gotowe!
+          
+          Nie wymaga instalacji Pythona ani żadnych bibliotek.
+          ffmpeg jest wbudowany w plik EXE.
+        files: dist/IPTVPlayer.exe
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
