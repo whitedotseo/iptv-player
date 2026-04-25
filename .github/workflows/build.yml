@@ -5,33 +5,37 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+      env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     - name: Setup Python 3.11
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
     - name: Install dependencies
-      run: |
-        pip install pyinstaller PyQt6 PyQt6-Qt6 PyQt6-sip requests
-    
+      run: pip install pyinstaller PyQt6 PyQt6-Qt6 PyQt6-sip requests
+
     - name: Download ffmpeg
+      shell: powershell
       run: |
         $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
         Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip
         Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_tmp
-        $ffmpeg = Get-ChildItem -Path ffmpeg_tmp -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
-        $ffprobe = Get-ChildItem -Path ffmpeg_tmp -Recurse -Filter "ffprobe.exe" | Select-Object -First 1
-        Copy-Item $ffmpeg.FullName -Destination ffmpeg.exe
-        Copy-Item $ffprobe.FullName -Destination ffprobe.exe
-      shell: powershell
-    
+        $ff = Get-ChildItem -Path ffmpeg_tmp -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+        $fp = Get-ChildItem -Path ffmpeg_tmp -Recurse -Filter "ffprobe.exe" | Select-Object -First 1
+        Copy-Item $ff.FullName -Destination ffmpeg.exe
+        Copy-Item $fp.FullName -Destination ffprobe.exe
+
     - name: Build EXE
       run: |
         pyinstaller `
@@ -52,31 +56,29 @@ jobs:
           --exclude-module tkinter `
           --exclude-module matplotlib `
           iptv_player.py
-    
-    - name: Upload EXE
+
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: IPTVPlayer-Windows
         path: dist/IPTVPlayer.exe
         retention-days: 30
-    
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
-      if: github.ref == 'refs/heads/main'
       with:
-        tag_name: v2.0
-        name: IPTV Player v2.0
+        tag_name: v2.0.${{ github.run_number }}
+        name: IPTV Player v2.0.${{ github.run_number }}
         body: |
           ## IPTV Player dla Windows
-          
-          ### Instalacja
+
+          ### Instalacja — 1 krok
           1. Pobierz `IPTVPlayer.exe`
           2. Uruchom — gotowe!
-          
-          Nie wymaga instalacji Pythona ani żadnych bibliotek.
-          ffmpeg jest wbudowany w plik EXE.
+
+          Nie wymaga instalacji Pythona, ffmpeg ani żadnych bibliotek.
+          Wszystko wbudowane w jeden plik EXE.
         files: dist/IPTVPlayer.exe
-        draft: false
-        prerelease: false
+        make_latest: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
